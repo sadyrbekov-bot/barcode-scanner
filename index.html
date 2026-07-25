@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Сканер штрихкодов</title>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --danger: #dc2626;
+    --success: #16a34a;
+    --bg: #f1f5f9;
+    --card-bg: #ffffff;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .screen { display: none; padding: 16px; padding-bottom: 90px; min-height: 100vh; }
+  .screen.active { display: block; }
+
+  .app-header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--primary);
+    color: white;
+    padding: 14px 16px;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+  }
+  .app-header .back-btn {
+    background: none; border: none; color: white; font-size: 22px;
+    padding: 0 8px; cursor: pointer; flex-shrink: 0;
+  }
+  .app-header .title { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-link-btn {
+    background: rgba(255,255,255,0.18); border: none; color: white;
+    font-size: 13px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0; font-weight: 600;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  label { display: block; font-size: 14px; color: var(--text-muted); margin: 10px 0 4px; font-weight: 600; }
+  input[type="text"], input[type="tel"], input[type="number"], textarea {
+    width: 100%; padding: 14px; font-size: 16px; border: 1px solid var(--border);
+    border-radius: 10px; background: #f8fafc;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+
+  button.btn {
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    margin-top: 12px;
+    background: var(--primary);
+    color: white;
+    transition: transform 0.05s;
+  }
+  button.btn:active { transform: scale(0.98); }
+  button.btn.secondary { background: #e2e8f0; color: var(--text); }
+  button.btn.danger { background: var(--danger); }
+  button.btn.success { background: var(--success); }
+  button.btn.outline { background: white; color: var(--primary); border: 2px solid var(--primary); }
+  button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.btn.small { padding: 10px; font-size: 14px; margin-top: 8px; }
+
+  .big-icon-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; padding: 28px 16px; background: var(--primary); color: white;
+    border-radius: 16px; font-size: 18px; font-weight: 700; border: none; width: 100%;
+    cursor: pointer;
+  }
+  .big-icon-btn .emoji { font-size: 40px; }
+
+  .store-info { text-align: center; margin-bottom: 20px; }
+  .store-info h2 { margin: 4px 0 0; font-size: 20px; }
+  .store-info p { margin: 2px 0; color: var(--text-muted); font-size: 14px; }
+
+  .badge {
+    display: inline-block; background: var(--primary); color: white;
+    border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 700;
+  }
+
+  /* Компактный сканер — чтобы поле ручного ввода было видно без скролла */
+  #reader-container {
+    width: 100%; max-height: 220px; overflow: hidden; border-radius: 12px;
+    background: #000;
+  }
+  #reader { width: 100%; }
+  #reader video, #reader canvas { max-height: 220px !important; object-fit: cover !important; width: 100% !important; }
+
+  .product-card { border: 2px solid var(--success); }
+  .product-name { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+  .product-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; gap: 10px; }
+  .product-row span:first-child { color: var(--text-muted); flex-shrink: 0; }
+  .product-row span:last-child { text-align: right; }
+  .qty-controls { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+  .qty-controls button {
+    width: 44px; height: 44px; border-radius: 10px; border: none; background: var(--border);
+    font-size: 22px; font-weight: 700; cursor: pointer;
+  }
+  .qty-controls input { text-align: center; width: 70px; }
+
+  .result-count-label {
+    font-size: 13px; color: var(--text-muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+  }
+
+  .cart-group-card { padding: 0; overflow: hidden; }
+  .cart-group-header {
+    background: #f8fafc; padding: 14px 16px; border-bottom: 1px solid var(--border);
+  }
+  .cart-group-header .supplier-name { font-weight: 700; font-size: 15px; }
+  .cart-group-header .supplier-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .cart-group-body { padding: 4px 16px; }
+  .cart-group-footer { padding: 12px 16px 16px; display: flex; gap: 8px; }
+  .cart-group-footer .btn { margin-top: 0; }
+
+  .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .cart-item:last-child { border-bottom: none; }
+  .cart-item-info { flex: 1; }
+  .cart-item-info .name { font-weight: 600; font-size: 15px; }
+  .cart-item-info .meta { font-size: 12px; color: var(--text-muted); }
+  .cart-item-controls { display: flex; align-items: center; gap: 6px; }
+  .cart-item-controls input { width: 50px; padding: 8px; text-align: center; }
+  .cart-item-controls button {
+    width: 34px; height: 34px; border-radius: 8px; border: none; background: var(--border);
+    font-size: 16px; cursor: pointer;
+  }
+  .remove-btn { background: none; border: none; color: var(--danger); font-size: 20px; padding: 4px 8px; cursor: pointer; }
+
+  .empty-state { text-align: center; padding: 40px 16px; color: var(--text-muted); }
+  .empty-state .emoji { font-size: 48px; display: block; margin-bottom: 10px; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 16px; right: 16px; z-index: 100;
+    background: var(--text); color: white; padding: 14px 18px; border-radius: 12px;
+    text-align: center; font-size: 14px; opacity: 0; transform: translateY(20px);
+    transition: all 0.25s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: var(--success); }
+
+  .spinner {
+    width: 22px; height: 22px; border: 3px solid rgba(255,255,255,0.4);
+    border-top-color: white; border-radius: 50%; display: inline-block;
+    animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px;
+  }
+  .spinner.dark { border: 3px solid rgba(37,99,235,0.2); border-top-color: var(--primary); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .search-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 22px; color: var(--text-muted); font-size: 14px; }
+
+  .order-item { padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .order-item:last-child { border-bottom: none; }
+  .order-item .date { font-size: 13px; color: var(--text-muted); }
+  .order-item .supplier { font-weight: 600; margin: 2px 0; }
+  .order-item .stats { font-size: 13px; color: var(--text-muted); }
+
+  .section-title { font-size: 14px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px; }
+
+  .config-banner {
+    background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px;
+    padding: 12px; font-size: 13px; margin-bottom: 14px; color: #92400e;
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= ЭКРАН 0: НУЖНО НАСТРОИТЬ API_URL ================= -->
+<div id="screen-config-error" class="screen">
+  <div class="app-header"><span class="title">⚠️ Настройка</span></div>
+  <div style="padding-top: 20px;">
+    <div class="card">
+      <div class="empty-state">
+        <span class="emoji">🔧</span>
+        <p>Не указан адрес backend (Apps Script API).</p>
+        <p style="font-size:13px;">Открой этот файл в редакторе, найди строку
+        <code>const API_URL = '...'</code> и вставь туда ссылку
+        <code>.../exec</code> от твоего развёрнутого Apps Script проекта.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 1: РЕГИСТРАЦИЯ / ВХОД ================= -->
+<div id="screen-auth" class="screen active">
+  <div class="app-header"><span class="title">📦 Сканер штрихкодов</span></div>
+  <div style="padding-top: 40px;">
+    <div class="card">
+      <div class="store-info">
+        <div class="emoji" style="font-size:48px;">🏪</div>
+        <h2>Вход в приложение</h2>
+        <p>Введите номер телефона для входа или регистрации</p>
+      </div>
+      <label>Номер телефона</label>
+      <input type="tel" id="auth-phone" placeholder="+998 90 123 45 67">
+      <button class="btn" id="btn-check-phone">Продолжить</button>
+    </div>
+
+    <div class="card" id="register-fields" style="display:none;">
+      <div class="section-title">Регистрация магазина</div>
+      <label>Название магазина</label>
+      <input type="text" id="reg-store-name" placeholder="Например: Продукты у дома">
+      <label>Адрес магазина</label>
+      <input type="text" id="reg-store-address" placeholder="Улица, дом">
+      <button class="btn success" id="btn-register">Зарегистрироваться</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 2: ГЛАВНЫЙ ЭКРАН ================= -->
+<div id="screen-home" class="screen">
+  <div class="app-header">
+    <span class="title">📦 Главная</span>
+    <button class="back-btn" id="btn-logout" title="Выйти">⎋</button>
+  </div>
+  <div style="padding-top: 20px;">
+    <div class="card store-info">
+      <div class="emoji" style="font-size:36px;">🏪</div>
+      <h2 id="home-store-name">—</h2>
+      <p id="home-store-address">—</p>
+    </div>
+
+    <button class="big-icon-btn" id="btn-scan">
+      <span class="emoji">📷</span>
+      Сканировать штрихкод
+    </button>
+
+    <div class="card" style="margin-top:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-weight:700;">Текущий заказ</div>
+          <div style="color:var(--text-muted); font-size:14px;">Позиций в корзине: <span id="home-cart-count">0</span></div>
+        </div>
+        <span class="badge" id="home-cart-badge">0</span>
+      </div>
+      <button class="btn secondary" id="btn-go-cart">Перейти в корзину</button>
+    </div>
+
+    <button class="btn outline" id="btn-history">📜 История заказов</button>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 3: СКАНЕР ================= -->
+<div id="screen-scanner" class="screen">
+  <div class="app-header">
+    <button class="back-btn" id="btn-scanner-back">←</button>
+    <span class="title">Сканирование</span>
+    <button class="header-link-btn" id="btn-scanner-go-cart">🛒 Заказ (<span id="scanner-cart-count">0</span>)</button>
+  </div>
+  <div style="padding-top: 16px;">
+    <div class="card">
+      <div id="reader-container"><div id="reader"></div></div>
+      <button class="btn" id="btn-start-scanner" style="display:none;">Запустить сканер</button>
+      <button class="btn secondary" id="btn-stop-scanner" style="display:none;">Остановить сканер</button>
+    </div>
+
+    <div class="card" id="manual-entry-card">
+      <div class="section-title">Штрихкод или название товара</div>
+      <input type="text" id="manual-barcode" placeholder="Введите штрихкод или название...">
+      <button class="btn secondary" id="btn-manual-search">Найти товар</button>
+    </div>
+
+    <div class="card" id="search-loading-card" style="display:none;">
+      <div class="search-loading"><span class="spinner dark"></span>Ищем товар...</div>
+    </div>
+
+    <div id="product-results-card" style="display:none;">
+      <div class="result-count-label" id="results-count-label"></div>
+      <div id="product-results-list"></div>
+    </div>
+
+    <div class="card" id="product-not-found-card" style="display:none;">
+      <div class="empty-state">
+        <span class="emoji">❓</span>
+        Товар <b id="nf-query">—</b> не найден в базе.
+      </div>
+      <button class="btn secondary" id="btn-add-manual">➕ Добавить товар вручную</button>
+    </div>
+
+    <div class="card" id="manual-product-form" style="display:none;">
+      <div class="section-title">Новый товар</div>
+      <label>Название товара</label>
+      <input type="text" id="mp-name">
+      <label>Поставщик</label>
+      <input type="text" id="mp-supplier">
+      <label>Контактное лицо</label>
+      <input type="text" id="mp-contact">
+      <label>Телефон агента</label>
+      <input type="tel" id="mp-agent-phone">
+      <label>WhatsApp</label>
+      <input type="tel" id="mp-whatsapp">
+      <button class="btn success" id="btn-save-manual-product">Сохранить и добавить в корзину</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 4: КОРЗИНА (сгруппирована по поставщикам) ================= -->
+<div id="screen-cart" class="screen">
+  <div class="app-header">
+    <button class="back-btn" id="btn-cart-back">←</button>
+    <span class="title">Корзина</span>
+    <span></span>
+  </div>
+  <div style="padding-top: 16px;">
+    <div id="cart-groups-container"></div>
+    <button class="btn secondary" id="btn-cart-add-more">📷 Добавить сканированием</button>
+    <button class="btn danger" id="btn-clear-cart">Очистить всю корзину</button>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 5: ПОДТВЕРЖДЕНИЕ ЗАКАЗА (одна группа-поставщик) ================= -->
+<div id="screen-checkout" class="screen">
+  <div class="app-header">
+    <button class="back-btn" id="btn-checkout-back">←</button>
+    <span class="title">Оформление заказа</span>
+    <span></span>
+  </div>
+  <div style="padding-top: 16px;">
+    <div class="card">
+      <div class="section-title">Ваш магазин</div>
+      <div class="product-row"><span>Название</span><span id="co-store-name">—</span></div>
+      <div class="product-row"><span>Адрес</span><span id="co-store-address">—</span></div>
+      <div class="product-row"><span>Телефон</span><span id="co-store-phone">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Поставщик</div>
+      <div class="product-row"><span>Название</span><span id="co-supplier">—</span></div>
+      <div class="product-row"><span>Контакт</span><span id="co-contact">—</span></div>
+      <div class="product-row"><span>Телефон агента</span><span id="co-agent-phone">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Состав заказа</div>
+      <div id="co-items-list"></div>
+    </div>
+
+    <div class="card">
+      <label>Комментарий к заказу</label>
+      <textarea id="co-comment" placeholder="Необязательно"></textarea>
+    </div>
+
+    <button class="btn success" id="btn-send-whatsapp">📲 Отправить заказ в WhatsApp</button>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 6: ИСТОРИЯ ЗАКАЗОВ ================= -->
+<div id="screen-history" class="screen">
+  <div class="app-header">
+    <button class="back-btn" id="btn-history-back">←</button>
+    <span class="title">История заказов</span>
+    <span></span>
+  </div>
+  <div style="padding-top: 16px;">
+    <div class="card" id="history-list-card">
+      <div id="history-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ЭКРАН 7: ДЕТАЛИ ЗАКАЗА ================= -->
+<div id="screen-order-detail" class="screen">
+  <div class="app-header">
+    <button class="back-btn" id="btn-order-detail-back">←</button>
+    <span class="title">Детали заказа</span>
+    <span></span>
+  </div>
+  <div style="padding-top: 16px;">
+    <div class="card">
+      <div class="product-row"><span>Дата</span><span id="od-date">—</span></div>
+      <div class="product-row"><span>Поставщик</span><span id="od-supplier">—</span></div>
+      <div class="product-row"><span>Позиций</span><span id="od-positions">—</span></div>
+      <div class="product-row"><span>Общее количество</span><span id="od-total-qty">—</span></div>
+      <div class="section-title">Товары</div>
+      <div id="od-products" style="font-size:14px; color: var(--text-muted); white-space: pre-wrap;">—</div>
+      <div class="section-title">Комментарий</div>
+      <div id="od-comment" style="font-size:14px; color: var(--text-muted);">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   НАСТРОЙКА: ВСТАВЬ СЮДА СВОЮ ССЫЛКУ APPS SCRIPT (.../exec)
+   ========================================================================= */
+const API_URL = 'https://script.google.com/macros/s/AKfycbyh72gCUmwV7yLelkTQbcIdM6PpRstptyzR99lfJXKJsOKUZAXnBACtrw4h9mkmteua/exec';
+
+/* =========================================================================
+   СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+   ========================================================================= */
+const state = {
+  user: null,
+  sessionId: null,
+  cart: [],
+  lastResults: [],
+  html5QrCode: null,
+  scannerRunning: false,
+  checkoutSupplier: null
+};
+
+/* =========================================================================
+   УТИЛИТЫ
+   ========================================================================= */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function toast(message, type) {
+  const el = document.getElementById('toast');
+  el.textContent = message;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  setTimeout(() => { el.className = 'toast'; }, 2800);
+}
+
+function setButtonLoading(btn, loadingText) {
+  btn.dataset.originalText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>' + loadingText;
+}
+function resetButton(btn) {
+  btn.disabled = false;
+  btn.textContent = btn.dataset.originalText || btn.textContent;
+}
+
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+async function apiCall(action, ...args) {
+  let response;
+  try {
+    response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, args })
+    });
+  } catch (networkErr) {
+    throw new Error('Нет связи с сервером. Проверьте интернет-соединение и правильность API_URL.');
+  }
+
+  let json;
+  try {
+    json = await response.json();
+  } catch (parseErr) {
+    throw new Error('Сервер вернул неожиданный ответ (проверьте, что API_URL указывает на .../exec).');
+  }
+
+  if (!json.ok) {
+    throw new Error(json.error || 'Неизвестная ошибка сервера.');
+  }
+  return json.data;
+}
+
+/* =========================================================================
+   ИНИЦИАЛИЗАЦИЯ / СЕССИЯ
+   ========================================================================= */
+window.addEventListener('DOMContentLoaded', () => {
+  if (!API_URL || API_URL.indexOf('PASTE_YOUR') === 0) {
+    showScreen('screen-config-error');
+    return;
+  }
+
+  const savedUser = localStorage.getItem('bs_user');
+  if (savedUser) {
+    try {
+      state.user = JSON.parse(savedUser);
+      state.sessionId = localStorage.getItem('bs_session') || uuidv4();
+      localStorage.setItem('bs_session', state.sessionId);
+      enterApp();
+      return;
+    } catch (e) { /* fallthrough к экрану входа */ }
+  }
+  showScreen('screen-auth');
+});
+
+function enterApp() {
+  document.getElementById('home-store-name').textContent = state.user['Название_магазина'];
+  document.getElementById('home-store-address').textContent = state.user['Адрес_магазина'] || '—';
+  showScreen('screen-home');
+  refreshCartBadge();
+}
+
+/* =========================================================================
+   3.1 РЕГИСТРАЦИЯ / ВХОД
+   ========================================================================= */
+let pendingPhone = '';
+
+document.getElementById('btn-check-phone').addEventListener('click', async () => {
+  const phone = document.getElementById('auth-phone').value.trim();
+  if (!phone) { toast('Введите номер телефона', 'error'); return; }
+  const btn = document.getElementById('btn-check-phone');
+  setButtonLoading(btn, 'Проверка...');
+  try {
+    const result = await apiCall('loginUser', phone);
+    resetButton(btn);
+    if (result.found) {
+      state.user = result.user;
+      state.sessionId = uuidv4();
+      localStorage.setItem('bs_user', JSON.stringify(state.user));
+      localStorage.setItem('bs_session', state.sessionId);
+      toast('Добро пожаловать, ' + state.user['Название_магазина'] + '!', 'success');
+      enterApp();
+    } else {
+      pendingPhone = phone;
+      document.getElementById('register-fields').style.display = 'block';
+      toast('Новый номер — заполните данные магазина');
+    }
+  } catch (err) {
+    resetButton(btn);
+    toast('Ошибка: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('btn-register').addEventListener('click', async () => {
+  const storeName = document.getElementById('reg-store-name').value.trim();
+  const storeAddress = document.getElementById('reg-store-address').value.trim();
+  if (!storeName) { toast('Укажите название магазина', 'error'); return; }
+  const btn = document.getElementById('btn-register');
+  setButtonLoading(btn, 'Регистрация...');
+  try {
+    const user = await apiCall('registerUser', { phone: pendingPhone, storeName, storeAddress });
+    resetButton(btn);
+    state.user = user;
+    state.sessionId = uuidv4();
+    localStorage.setItem('bs_user', JSON.stringify(state.user));
+    localStorage.setItem('bs_session', state.sessionId);
+    toast('Регистрация успешна!', 'success');
+    enterApp();
+  } catch (err) {
+    resetButton(btn);
+    toast('Ошибка: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm('Выйти из аккаунта?')) return;
+  localStorage.removeItem('bs_user');
+  localStorage.removeItem('bs_session');
+  state.user = null;
+  state.sessionId = null;
+  document.getElementById('register-fields').style.display = 'none';
+  document.getElementById('auth-phone').value = '';
+  showScreen('screen-auth');
+});
+
+/* =========================================================================
+   3.2 ГЛАВНЫЙ ЭКРАН
+   ========================================================================= */
+async function refreshCartBadge() {
+  try {
+    const cart = await apiCall('getCart', state.sessionId);
+    state.cart = cart;
+    document.getElementById('home-cart-count').textContent = cart.length;
+    document.getElementById('home-cart-badge').textContent = cart.length;
+    const scannerCountEl = document.getElementById('scanner-cart-count');
+    if (scannerCountEl) scannerCountEl.textContent = cart.length;
+  } catch (err) { /* тихо игнорируем */ }
+}
+
+document.getElementById('btn-scan').addEventListener('click', () => {
+  resetScannerScreen();
+  showScreen('screen-scanner');
+  startScanner(); // автозапуск камеры сразу при входе на экран сканера
+});
+
+document.getElementById('btn-go-cart').addEventListener('click', () => openCart());
+document.getElementById('btn-history').addEventListener('click', () => openHistory());
+document.getElementById('btn-scanner-go-cart').addEventListener('click', async () => {
+  await stopScanner();
+  openCart();
+});
+
+/* =========================================================================
+   3.3 СКАНЕР
+   ========================================================================= */
+function resetScannerScreen() {
+  document.getElementById('product-results-card').style.display = 'none';
+  document.getElementById('product-not-found-card').style.display = 'none';
+  document.getElementById('manual-product-form').style.display = 'none';
+  document.getElementById('search-loading-card').style.display = 'none';
+  document.getElementById('manual-entry-card').style.display = 'block';
+  document.getElementById('manual-barcode').value = '';
+  refreshCartBadge();
+}
+
+document.getElementById('btn-scanner-back').addEventListener('click', async () => {
+  await stopScanner();
+  showScreen('screen-home');
+  refreshCartBadge();
+});
+
+document.getElementById('btn-start-scanner').addEventListener('click', startScanner);
+document.getElementById('btn-stop-scanner').addEventListener('click', stopScanner);
+
+async function startScanner() {
+  if (state.scannerRunning) return;
+  document.getElementById('btn-start-scanner').style.display = 'none';
+  document.getElementById('btn-stop-scanner').style.display = 'block';
+
+  state.html5QrCode = new Html5Qrcode('reader', {
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.ITF
+    ],
+    useBarCodeDetectorIfSupported: true,
+    verbose: false
+  });
+
+  const config = { fps: 10, qrbox: { width: 220, height: 110 } };
+
+  try {
+    await state.html5QrCode.start(
+      { facingMode: 'environment' },
+      config,
+      onScanSuccess,
+      () => {}
+    );
+    state.scannerRunning = true;
+  } catch (err) {
+    toast('Не удалось запустить камеру: ' + err, 'error');
+    document.getElementById('btn-start-scanner').style.display = 'block';
+    document.getElementById('btn-stop-scanner').style.display = 'none';
+  }
+}
+
+async function stopScanner() {
+  if (state.html5QrCode && state.scannerRunning) {
+    try { await state.html5QrCode.stop(); await state.html5QrCode.clear(); } catch (e) {}
+    state.scannerRunning = false;
+  }
+  document.getElementById('btn-start-scanner').style.display = 'block';
+  document.getElementById('btn-stop-scanner').style.display = 'none';
+}
+
+async function onScanSuccess(decodedText) {
+  await stopScanner();
+  await lookupQuery(decodedText);
+}
+
+document.getElementById('btn-manual-search').addEventListener('click', () => {
+  const query = document.getElementById('manual-barcode').value.trim();
+  if (!query) { toast('Введите штрихкод или название', 'error'); return; }
+  const btn = document.getElementById('btn-manual-search');
+  setButtonLoading(btn, 'Поиск...');
+  lookupQuery(query).finally(() => resetButton(btn));
+});
+
+async function lookupQuery(query) {
+  document.getElementById('product-results-card').style.display = 'none';
+  document.getElementById('product-not-found-card').style.display = 'none';
+  document.getElementById('manual-product-form').style.display = 'none';
+  document.getElementById('search-loading-card').style.display = 'block';
+
+  try {
+    const result = await apiCall('searchProducts', query, state.user.ID);
+    document.getElementById('search-loading-card').style.display = 'none';
+
+    if (result.found) {
+      state.lastResults = result.products;
+      renderProductResults(result.products, result.searchType);
+    } else {
+      state.lastResults = [{ barcode: query, isNew: true }];
+      document.getElementById('nf-query').textContent = query;
+      document.getElementById('product-not-found-card').style.display = 'block';
+    }
+  } catch (err) {
+    document.getElementById('search-loading-card').style.display = 'none';
+    toast('Ошибка поиска: ' + err.message, 'error');
+  }
+}
+
+function renderProductResults(products, searchType) {
+  const container = document.getElementById('product-results-list');
+  const wrap = document.getElementById('product-results-card');
+  const label = document.getElementById('results-count-label');
+
+  label.textContent = products.length > 1
+    ? 'Найдено ' + products.length + ' предложений от разных поставщиков'
+    : 'Товар найден';
+
+  container.innerHTML = '';
+
+  products.forEach((product) => {
+    const card = document.createElement('div');
+    card.className = 'card product-card';
+    card.innerHTML = `
+      <div class="product-name">${escapeHtml(product['Название_товара'])}</div>
+      <div class="product-row"><span>Штрихкод</span><span>${escapeHtml(product['Штрихкод'] || '—')}</span></div>
+      <div class="product-row"><span>Поставщик</span><span>${escapeHtml(product['Поставщик'] || '—')}</span></div>
+      <div class="product-row"><span>Контактное лицо</span><span>${escapeHtml(product['Контактное_лицо'] || '—')}</span></div>
+      <div class="product-row"><span>Телефон агента</span><span>${escapeHtml(product['Телефон_агента'] || '—')}</span></div>
+      <div class="qty-controls">
+        <button class="qty-minus">−</button>
+        <input type="number" class="qty-input" value="1" min="1">
+        <button class="qty-plus">+</button>
+      </div>
+      <button class="btn success add-btn">Добавить в корзину</button>
+    `;
+
+    const qtyInput = card.querySelector('.qty-input');
+    card.querySelector('.qty-minus').addEventListener('click', () => {
+      qtyInput.value = Math.max(1, parseInt(qtyInput.value, 10) - 1);
+    });
+    card.querySelector('.qty-plus').addEventListener('click', () => {
+      qtyInput.value = parseInt(qtyInput.value, 10) + 1;
+    });
+
+    const addBtn = card.querySelector('.add-btn');
+    addBtn.addEventListener('click', async () => {
+      setButtonLoading(addBtn, 'Добавление...');
+      try {
+        await apiCall('addToCart', {
+          sessionId: state.sessionId,
+          userId: state.user.ID,
+          barcode: product['Штрихкод'],
+          productName: product['Название_товара'],
+          supplier: product['Поставщик'],
+          contactPerson: product['Контактное_лицо'],
+          agentPhone: product['Телефон_агента'],
+          whatsapp: product['WhatsApp'],
+          quantity: parseInt(qtyInput.value, 10) || 1
+        });
+        toast('Добавлено: ' + product['Название_товара'], 'success');
+        refreshCartBadge();
+        addBtn.textContent = '✓ Добавлено';
+        addBtn.disabled = true;
+      } catch (err) {
+        resetButton(addBtn);
+        toast('Ошибка: ' + err.message, 'error');
+      }
+    });
+
+    container.appendChild(card);
+  });
+
+  wrap.style.display = 'block';
+}
+
+document.getElementById('btn-add-manual').addEventListener('click', () => {
+  document.getElementById('product-not-found-card').style.display = 'none';
+  document.getElementById('manual-product-form').style.display = 'block';
+});
+
+document.getElementById('btn-save-manual-product').addEventListener('click', async () => {
+  const name = document.getElementById('mp-name').value.trim();
+  if (!name) { toast('Укажите название товара', 'error'); return; }
+  const btn = document.getElementById('btn-save-manual-product');
+  setButtonLoading(btn, 'Сохранение...');
+  try {
+    const original = state.lastResults[0] || {};
+    const product = await apiCall('addManualProduct', {
+      barcode: original.barcode || '',
+      productName: name,
+      supplier: document.getElementById('mp-supplier').value.trim(),
+      contactPerson: document.getElementById('mp-contact').value.trim(),
+      agentPhone: document.getElementById('mp-agent-phone').value.trim(),
+      whatsapp: document.getElementById('mp-whatsapp').value.trim()
+    });
+    await apiCall('addToCart', {
+      sessionId: state.sessionId,
+      userId: state.user.ID,
+      barcode: product['Штрихкод'],
+      productName: product['Название_товара'],
+      supplier: product['Поставщик'],
+      contactPerson: product['Контактное_лицо'],
+      agentPhone: product['Телефон_агента'],
+      whatsapp: product['WhatsApp'],
+      quantity: 1
+    });
+    resetButton(btn);
+    toast('Товар создан и добавлен в корзину!', 'success');
+    resetScannerScreen();
+  } catch (err) {
+    resetButton(btn);
+    toast('Ошибка: ' + err.message, 'error');
+  }
+});
+
+/* =========================================================================
+   3.4 КОРЗИНА (группировка по поставщикам)
+   ========================================================================= */
+document.getElementById('btn-cart-back').addEventListener('click', () => {
+  showScreen('screen-home');
+  refreshCartBadge();
+});
+document.getElementById('btn-cart-add-more').addEventListener('click', () => {
+  resetScannerScreen();
+  showScreen('screen-scanner');
+  startScanner();
+});
+
+async function openCart() {
+  showScreen('screen-cart');
+  await renderCartGroups();
+}
+
+function groupCartBySupplier(cart) {
+  const groups = {};
+  cart.forEach(item => {
+    const key = item['Поставщик'] || '';
+    if (!groups[key]) {
+      groups[key] = {
+        supplier: key,
+        contact: item['Контактное_лицо'] || '',
+        agentPhone: item['Телефон_агента'] || '',
+        items: []
+      };
+    }
+    groups[key].items.push(item);
+  });
+  return Object.values(groups);
+}
+
+async function renderCartGroups() {
+  const container = document.getElementById('cart-groups-container');
+  container.innerHTML = '<div class="card"><div class="empty-state">Загрузка...</div></div>';
+  try {
+    const cart = await apiCall('getCart', state.sessionId);
+    state.cart = cart;
+
+    if (!cart.length) {
+      container.innerHTML = '<div class="card"><div class="empty-state"><span class="emoji">🛒</span>Корзина пуста</div></div>';
+      return;
+    }
+
+    const groups = groupCartBySupplier(cart);
+    container.innerHTML = '';
+
+    groups.forEach(group => {
+      const groupCard = document.createElement('div');
+      groupCard.className = 'card cart-group-card';
+
+      const totalQty = group.items.reduce((sum, i) => sum + (parseInt(i['Количество'], 10) || 0), 0);
+
+      groupCard.innerHTML = `
+        <div class="cart-group-header">
+          <div class="supplier-name">${escapeHtml(group.supplier || 'Без поставщика')}</div>
+          <div class="supplier-meta">${escapeHtml(group.contact || '')} ${group.contact && group.agentPhone ? '·' : ''} ${escapeHtml(group.agentPhone || '')} · ${group.items.length} поз. · ${totalQty} шт.</div>
+        </div>
+        <div class="cart-group-body" data-items></div>
+        <div class="cart-group-footer">
+          <button class="btn secondary small clear-group-btn" style="flex:1;">Очистить</button>
+          <button class="btn success small checkout-group-btn" style="flex:2;">Оформить заказ</button>
+        </div>
+      `;
+
+      const itemsContainer = groupCard.querySelector('[data-items]');
+      group.items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'cart-item';
+        row.innerHTML = `
+          <div class="cart-item-info">
+            <div class="name">${escapeHtml(item['Название_товара'])}</div>
+            <div class="meta">${escapeHtml(item['Штрихкод'] || '')}</div>
+          </div>
+          <div class="cart-item-controls">
+            <button class="qty-minus">−</button>
+            <input type="number" class="qty-input" value="${item['Количество']}" min="1">
+            <button class="qty-plus">+</button>
+            <button class="remove-btn">✕</button>
+          </div>`;
+
+        const qtyInput = row.querySelector('.qty-input');
+        row.querySelector('.qty-minus').addEventListener('click', () => {
+          qtyInput.value = Math.max(1, parseInt(qtyInput.value, 10) - 1);
+          updateQty(item.ID, qtyInput.value);
+        });
+        row.querySelector('.qty-plus').addEventListener('click', () => {
+          qtyInput.value = parseInt(qtyInput.value, 10) + 1;
+          updateQty(item.ID, qtyInput.value);
+        });
+        qtyInput.addEventListener('change', () => updateQty(item.ID, qtyInput.value));
+        row.querySelector('.remove-btn').addEventListener('click', async () => {
+          await apiCall('removeCartItem', item.ID, state.sessionId);
+          toast('Товар удалён из корзины');
+          renderCartGroups();
+        });
+
+        itemsContainer.appendChild(row);
+      });
+
+      groupCard.querySelector('.clear-group-btn').addEventListener('click', async () => {
+        if (!confirm('Очистить товары от «' + (group.supplier || 'без поставщика') + '»?')) return;
+        try {
+          await apiCall('clearCartGroup', state.sessionId, group.supplier);
+          toast('Группа очищена');
+          renderCartGroups();
+        } catch (err) {
+          toast('Ошибка: ' + err.message, 'error');
+        }
+      });
+
+      groupCard.querySelector('.checkout-group-btn').addEventListener('click', () => {
+        openCheckout(group.supplier);
+      });
+
+      container.appendChild(groupCard);
+    });
+  } catch (err) {
+    container.innerHTML = '<div class="card"><div class="empty-state">Ошибка загрузки корзины</div></div>';
+    toast('Ошибка: ' + err.message, 'error');
+  }
+}
+
+async function updateQty(rowId, qty) {
+  try {
+    await apiCall('updateCartItemQuantity', rowId, state.sessionId, qty);
+  } catch (err) {
+    toast('Ошибка обновления количества: ' + err.message, 'error');
+  }
+}
+
+document.getElementById('btn-clear-cart').addEventListener('click', async () => {
+  if (!confirm('Очистить всю корзину (все поставщики)?')) return;
+  try {
+    await apiCall('clearCart', state.sessionId);
+    toast('Корзина очищена');
+    renderCartGroups();
+    refreshCartBadge();
+  } catch (err) {
+    toast('Ошибка: ' + err.message, 'error');
+  }
+});
+
+/* =========================================================================
+   3.5 ПОДТВЕРЖДЕНИЕ ЗАКАЗА (для одного поставщика)
+   ========================================================================= */
+document.getElementById('btn-checkout-back').addEventListener('click', () => openCart());
+
+async function openCheckout(supplier) {
+  state.checkoutSupplier = supplier || '';
+  showScreen('screen-checkout');
+  document.getElementById('co-store-name').textContent = state.user['Название_магазина'];
+  document.getElementById('co-store-address').textContent = state.user['Адрес_магазина'] || '—';
+  document.getElementById('co-store-phone').textContent = state.user['Номер_телефона'];
+
+  const cart = await apiCall('getCart', state.sessionId);
+  state.cart = cart;
+  const groupItems = cart.filter(i => (i['Поставщик'] || '') === (supplier || ''));
+  const first = groupItems[0] || {};
+  document.getElementById('co-supplier').textContent = first['Поставщик'] || 'Без поставщика';
+  document.getElementById('co-contact').textContent = first['Контактное_лицо'] || '—';
+  document.getElementById('co-agent-phone').textContent = first['Телефон_агента'] || '—';
+
+  const itemsEl = document.getElementById('co-items-list');
+  itemsEl.innerHTML = groupItems.map((item, idx) =>
+    `<div class="product-row"><span>${idx + 1}. ${escapeHtml(item['Название_товара'])}</span><span>${item['Количество']} шт.</span></div>`
+  ).join('');
+}
+
+document.getElementById('btn-send-whatsapp').addEventListener('click', async () => {
+  const comment = document.getElementById('co-comment').value.trim();
+  const btn = document.getElementById('btn-send-whatsapp');
+  setButtonLoading(btn, 'Оформление...');
+  try {
+    const result = await apiCall('checkoutOrder', {
+      sessionId: state.sessionId,
+      userId: state.user.ID,
+      supplier: state.checkoutSupplier || '',
+      comment: comment
+    });
+    resetButton(btn);
+    toast('Заказ оформлен! Открываю WhatsApp...', 'success');
+    window.open(result.waLink, '_blank');
+    document.getElementById('co-comment').value = '';
+    openCart();
+  } catch (err) {
+    resetButton(btn);
+    toast('Ошибка: ' + err.message, 'error');
+  }
+});
+
+/* =========================================================================
+   3.6 ИСТОРИЯ ЗАКАЗОВ
+   ========================================================================= */
+document.getElementById('btn-history-back').addEventListener('click', () => showScreen('screen-home'));
+document.getElementById('btn-order-detail-back').addEventListener('click', () => openHistory());
+
+async function openHistory() {
+  showScreen('screen-history');
+  const listEl = document.getElementById('history-list');
+  listEl.innerHTML = '<div class="empty-state">Загрузка...</div>';
+  try {
+    const orders = await apiCall('getOrderHistory', state.user.ID);
+    if (!orders.length) {
+      listEl.innerHTML = '<div class="empty-state"><span class="emoji">📭</span>Заказов пока нет</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    orders.forEach(order => {
+      const row = document.createElement('div');
+      row.className = 'order-item';
+      row.innerHTML = `
+        <div class="date">${escapeHtml(order['Дата_заказа'])}</div>
+        <div class="supplier">${escapeHtml(order['Поставщик'] || 'Без поставщика')}</div>
+        <div class="stats">${order['Всего_позиций']} позиций · ${order['Общее_количество']} шт. всего</div>`;
+      row.addEventListener('click', () => openOrderDetail(order.ID));
+      listEl.appendChild(row);
+    });
+  } catch (err) {
+    listEl.innerHTML = '<div class="empty-state">Ошибка загрузки истории</div>';
+    toast('Ошибка: ' + err.message, 'error');
+  }
+}
+
+async function openOrderDetail(orderId) {
+  showScreen('screen-order-detail');
+  try {
+    const order = await apiCall('getOrderDetails', orderId);
+    document.getElementById('od-date').textContent = order['Дата_заказа'];
+    document.getElementById('od-supplier').textContent = order['Поставщик'] || '—';
+    document.getElementById('od-positions').textContent = order['Всего_позиций'];
+    document.getElementById('od-total-qty').textContent = order['Общее_количество'];
+    document.getElementById('od-products').textContent = (order['Товары'] || '').split('; ').join('\n');
+    document.getElementById('od-comment').textContent = order['Комментарий'] || '—';
+  } catch (err) {
+    toast('Ошибка: ' + err.message, 'error');
+  }
+}
+
+/* =========================================================================
+   ВСПОМОГАТЕЛЬНОЕ
+   ========================================================================= */
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
